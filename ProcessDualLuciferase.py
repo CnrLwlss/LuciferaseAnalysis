@@ -1,57 +1,63 @@
 __author__ = 'victoriatorrance'
 
-
+import glob
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+def getSpreadsheet():
+    '''Finds a single Excel spreadsheet in the current directory.'''
+    flist=glob.glob("./*.xls*")
+    if len(flist)>1:
+        print("Too many Excel files to choose from!")
+        for f in flist:
+            print f
+        return()
+    else:
+        return(flist[0])
+
+def getReporter(control):
+    if control.upper() == 'FIREFLY':
+        reporter = 'Renilla'
+    else:
+        reporter = 'Firefly'
+    return(reporter)
 
 ##### USER INPUT REQUIRED ########
 control = 'firefly'
-# first and last collumn containing data
+# user can optionally specify a spreadsheet filename.  Specify a value of None to search for a spreadsheet automatically
+spread_file = None
+# first and last column containing data
 first_col_last_col = range(2,8,1)
 # which row in the spreadsheet does the data start?
 row_skip = 1
 ##############
 
+reporter=getReporter(control)
 
-if control == 'Firefly' or control == 'firefly' or control == 'FIREFLY':
-    reporter = 'Renilla'
-else:
-    reporter = 'Firefly'
+if spread_file is None:
+    spread_file=getSpreadsheet()
 
-f = pd.read_excel('example_data.xlsx', skiprows= row_skip, parse_cols = first_col_last_col)
+f = pd.read_excel(spread_file, skiprows= row_skip, parse_cols = first_col_last_col)
 
-# Deducts the blank and then removes it from dataframe
+# Deducts blank values from Firefly and Renilla columns and then removes blank values from dataframe
 x = f.loc[(f['Genotype'] == 'blank')]
-blank_F, blank_R =  x['Firefly'], x['Renilla']
-i = 0
-for first, last, x, y in zip(f['Plasmid'], f['Genotype'], f['Firefly'], f['Renilla']):
-    f['Firefly'][i] = x - blank_F
-    f['Renilla'][i] = y - blank_R
-    i = i+1
+blank_F, blank_R =  x['Firefly'].values[0], x['Renilla'].values[0]
+f["Firefly"]=f["Firefly"]-blank_F
+f["Renilla"]=f["Renilla"]-blank_R
 f = f[f.Plasmid != "blank"]
 
-
-# returns a list of unique geneotypes within our dataframe
+# subsets original dataframe to give dataframes with unique genotypes
 Genotypes = set(f['Genotype'])
 Genotypes = sorted(Genotypes, reverse=False)
-# loops through each of the unique geneotypes and returns for each a dataframe containing the only the values concerned
-# with that geneotype. these are stored in a list which is zipped to its 'geneotype' name
-dfs, Genes = [], []
-for gene in Genotypes:
-    data = f[f['Genotype'].isin([gene])]
-    data =  data.drop('Genotype', 1)
-    data = data.set_index(data.Plasmid)
-    dfs.append((data))
-    Genes.append((gene))
-zipped = zip(Genes, dfs)
 
-# raw data is plotted, each geneotype in a separate subplot
-fig, axes = plt.subplots(nrows=1, ncols=len(zipped), sharey=True)
-for i in range(0, len(zipped)):
-    zipped[i][1].plot(ax=axes[i], kind='bar', color=['r','y']); axes[i].set_title('%s'%zipped[i][0]) #r'%s$\Delta$'
+grps=f.groupby("Genotype")
 
+# raw data is plotted, each genotype in a separate subplot
+fig, axes = plt.subplots(nrows=1, ncols=len(Genotypes), sharey=True)
+for i,gene in enumerate(Genotypes):
+    pltdf=grps.get_group(gene)[["Plasmid","Firefly","Renilla"]].set_index("Plasmid")
+    pltdf.plot(ax=axes[i], kind='bar', color=['r','y']); axes[i].set_title('%s'%gene) #r'%s$\Delta$'
 plt.show()
 
 # creates a new dataframe containing only relative renilla values
